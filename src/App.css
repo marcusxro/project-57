@@ -1,0 +1,70 @@
+@font-face {
+  font-family: 'boldFont';
+  src: url('./font/NeueMontreal-Bold.otf') format('truetype');
+  font-weight: normal;
+  font-style: normal;
+}
+
+@font-face {
+  font-family: 'lightFont';
+  src: url('./font/NeueMontreal-Light.otf') format('truetype');
+  font-weight: normal;
+  font-style: normal;
+}
+
+@font-face {
+  font-family: 'mediumFont';
+  src: url('./font/NeueMontreal-Medium.otf') format('truetype');
+  font-weight: normal;
+  font-style: normal;
+}
+
+@font-face {
+  font-family: 'regularFont';
+  src: url('./font/NeueMontreal-Regular.otf') format('truetype');
+  font-weight: normal;
+  font-style: normal;
+}
+
+* {
+  margin: 0;
+  box-sizing: border-box;
+  padding: 0;
+  font-family: 'mediumFont';
+}
+
+.mediumFontSize{
+  font-family: 'mediumFont';
+}
+
+.boldFontSize {
+  font-family: 'boldFont';
+}
+
+.normalFontSize{
+  font-family: 'regularFont';
+}
+
+.lightFontSize{
+  font-family: 'lightFont';
+}
+.headerPosition {
+  position: fixed;
+  top: 30px;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  z-index: 2000;
+  width: 100%;
+}
+
+body::-webkit-scrollbar {
+  display: none;
+}
+
+.reducedLineHeight {
+  line-height: 90%;
+}
+
+.clampedFontSize {
+  font-size: clamp(4.5rem, 8vw, 8rem);
+}
