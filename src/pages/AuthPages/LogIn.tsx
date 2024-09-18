@@ -1,4 +1,4 @@
-import React, { FormEvent, useState } from 'react'
+import React, { FormEvent, useEffect, useState } from 'react'
 import { authKey } from '../../firebase/FirebaseKey'
 import { signInWithEmailAndPassword } from 'firebase/auth'
 import { ToastContainer, toast } from 'react-toastify';
@@ -10,12 +10,20 @@ import { useNavigate } from 'react-router-dom';
 import Header from '../../comps/Header';
 import MetaDecorator from '../../comps/MetaHeader/MetaDecorator';
 import Loader from '../../comps/Loader';
+import IsLoggedIn from '../../firebase/IsLoggedIn';
 
 const LogIn: React.FC = () => {
-
+  const [user] = IsLoggedIn()
   const [email, setEmail] = useState<string>("");
   const [password, setPassword] = useState<string>("");
   const [isLoggedIn, setIsloggedIn] = useState<boolean>(false)
+  const nav = useNavigate()
+
+  useEffect(() => {
+    if (user) {
+      nav("/system")
+    }
+  }, [user])
 
   const errorModal = (textStag: string) => {
     toast.error(`${textStag}`, {
@@ -62,13 +70,7 @@ const LogIn: React.FC = () => {
         } else {
           notif('User Signed in!')
           setIsloggedIn(false)
-          console.log('User Info:', {
-            displayName: user.displayName,
-            email: user.email,
-            photoURL: user.photoURL,
-            uid: user.uid,
-          });
-
+          nav('/system')
           localStorage.setItem('userPassword', password)
         }
 
@@ -98,7 +100,6 @@ const LogIn: React.FC = () => {
       })
   }
 
-  const nav = useNavigate()
 
   const handleGoogleLogin = async () => {
     try {
@@ -115,58 +116,63 @@ const LogIn: React.FC = () => {
       <ToastContainer />
       <Header />
       <MetaDecorator title="TradeTeach | Sign in" description='bla bla bla' />
-      <form
-        className='flex flex-col gap-3 w-full max-w-[400px] p-3 rounded-lg book'
-        action="submit" onSubmit={LoginAccount}>
-        <ToastContainer />
-        <h1 className='text-center pb-3'>
-          Sign in with your TradeTeach account.
-        </h1>
-        <input
-          placeholder='Email'
-          className='border-[1px] border-[#292929] h-[40px] rounded-lg outline-none px-3'
-          value={email}
-          onChange={(e) => { setEmail(e.target.value) }}
-          type="email" />
+      {
+        !user &&
+        <>
+          <form
+            className='flex flex-col gap-3 w-full max-w-[400px] p-3 rounded-lg book'
+            action="submit" onSubmit={LoginAccount}>
+            <ToastContainer />
+            <h1 className='text-center pb-3'>
+              Sign in with your TradeTeach account.
+            </h1>
+            <input
+              placeholder='Email'
+              className='border-[1px] border-[#292929] h-[40px] rounded-lg outline-none px-3'
+              value={email}
+              onChange={(e) => { setEmail(e.target.value) }}
+              type="email" />
 
-        <input
-          placeholder='Password'
-          className='border-[1px] border-[#292929] h-[40px] rounded-lg outline-none px-3'
-          value={password}
-          onChange={(e) => { setPassword(e.target.value) }}
-          type="password" />
-        <div>
-          Forgot Password? <span
-            onClick={() => { nav('/forgot-password') }}
-            className='cursor-pointer text-blue-400'>click here!</span>
-        </div>
+            <input
+              placeholder='Password'
+              className='border-[1px] border-[#292929] h-[40px] rounded-lg outline-none px-3'
+              value={password}
+              onChange={(e) => { setPassword(e.target.value) }}
+              type="password" />
+            <div>
+              Forgot Password? <span
+                onClick={() => { nav('/forgot-password') }}
+                className='cursor-pointer text-blue-400'>click here!</span>
+            </div>
 
-        <button
-          className='hover:bg-[#494949]  bg-[#292929] h-[40px] rounded-lg text-white flex items-center justify-center gap-2'
-          type='submit'>{isLoggedIn ? <Loader color='#fff' /> : 'Sign in'}</button>
+            <button
+              className='hover:bg-[#494949]  bg-[#292929] h-[40px] rounded-lg text-white flex items-center justify-center gap-2'
+              type='submit'>{isLoggedIn ? <Loader color='#fff' /> : 'Sign in'}</button>
 
-        <div className='flex items-center gap-3 justify-center'>
-          <div className='w-full h-[1px] bg-[#888]'></div>
-          <div>or</div>
-          <div className='w-full h-[1px] bg-[#888]'></div>
-        </div>
+            <div className='flex items-center gap-3 justify-center'>
+              <div className='w-full h-[1px] bg-[#888]'></div>
+              <div>or</div>
+              <div className='w-full h-[1px] bg-[#888]'></div>
+            </div>
 
-        <div
-          onClick={() => { handleGoogleLogin() }}
-          className='hover:bg-[#494949]  w-full flex h-[40px] bg-[#292929] items-center justify-center gap-3 rounded-lg text-white cursor-pointer'>
-          <div className=''>
-            <FaGoogle />
-          </div>
-          <div>
-            Sign in with Google
-          </div>
-        </div>
-        <div
-          onClick={() => { nav('/sign-up') }}
-          className='hover:bg-[#494949]  w-full flex h-[40px] bg-[#292929] items-center justify-center gap-3 rounded-lg text-white cursor-pointer'>
-          Create Acount
-        </div>
-      </form>
+            <div
+              onClick={() => { handleGoogleLogin() }}
+              className='hover:bg-[#494949]  w-full flex h-[40px] bg-[#292929] items-center justify-center gap-3 rounded-lg text-white cursor-pointer'>
+              <div className=''>
+                <FaGoogle />
+              </div>
+              <div>
+                Sign in with Google
+              </div>
+            </div>
+            <div
+              onClick={() => { nav('/sign-up') }}
+              className='hover:bg-[#494949]  w-full flex h-[40px] bg-[#292929] items-center justify-center gap-3 rounded-lg text-white cursor-pointer'>
+              Create Acount
+            </div>
+          </form>
+        </>
+      }
     </div>
   )
 }
