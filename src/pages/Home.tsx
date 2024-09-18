@@ -10,6 +10,8 @@ import Marquee from "react-fast-marquee";
 import { GoGoal } from "react-icons/go";
 
 const Home: React.FC = () => {
+
+  console.log(import.meta.env.VITE_AUTH_DOMAIN)
   return (
     <div className='relative  bg-[#EDE3E9] h-auto'>
       <Header />
