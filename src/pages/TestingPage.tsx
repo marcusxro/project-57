@@ -14,7 +14,6 @@ const TestingPage = () => {
   const [fetchedData, setFetchedData] = useState<dataType[] | null>(null);
 
   useEffect(() => {
-    // Fetch initial data
     getAccounts();
     const subscription = supabase
       .channel('public:accounts')
@@ -27,18 +26,14 @@ const TestingPage = () => {
       subscription.unsubscribe();
     };
   }, []);
-
-  //chagne the condition based o nthe id or the userid
   const handleRealtimeEvent = (payload: any) => {
     switch (payload.eventType) {
       case 'INSERT':
-        // Handle insert events
         setFetchedData((prevData) =>
           prevData ? [...prevData, payload.new] : [payload.new]
         );
         break;
       case 'UPDATE':
-        // Handle update events
         setFetchedData((prevData) =>
           prevData
             ? prevData.map((item) =>
@@ -48,9 +43,7 @@ const TestingPage = () => {
         );
         break;
       case 'DELETE':
-        // Handle delete events
         console.log("DELETED")
-
         setFetchedData((prevData) =>
           prevData ? prevData.filter((item) => item.id !== payload.old.id) : null
         );

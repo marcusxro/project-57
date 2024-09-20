@@ -22,11 +22,11 @@ const Signup: React.FC = () => {
     const [isAbleToClick, setIsAbleToClick] = useState<boolean>(true)
     const navigate = useNavigate()
 
-    useEffect(() => {
-        if (user) {
-            navigate('/system')
-        }
-    }, [user])
+    // useEffect(() => {
+    //     if (user) {
+    //         navigate('/system')
+    //     }
+    // }, [user])
 
 
     const clearInputs = () => {
