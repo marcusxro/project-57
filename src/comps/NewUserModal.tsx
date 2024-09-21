@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from 'react'
+import React, { ChangeEvent, useEffect, useRef, useState } from 'react'
 import IsLoggedIn from '../firebase/IsLoggedIn'
 import { supabase } from '../supabase/supabaseClient'
 import Loader from './Loader';
@@ -7,7 +7,9 @@ import { ToastContainer, toast } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.css';
 import Interests from './Interests';
 import gsap from 'gsap'
-
+import userNoProfile from '../assets/images/UserNoProfile.jpg'
+import { imageDB } from '../firebase/FirebaseKey';
+import { getStorage, ref, uploadBytes, getDownloadURL } from "firebase/storage"; // Firebase Storage imports
 
 
 interface dataType {
@@ -18,14 +20,15 @@ interface dataType {
     id: number | null;
     fullname: string | null;
     interests: string[] | null
+    isPrivate: boolean | null;
 }
 
 
-interface propsType{
+interface propsType {
     bools: boolean;
     closer: React.Dispatch<React.SetStateAction<boolean>>;
 }
-const NewUserModal: React.FC<propsType> = ({bools, closer}) => {
+const NewUserModal: React.FC<propsType> = ({ bools, closer }) => {
 
     const interestArr = Interests
 
@@ -110,54 +113,72 @@ const NewUserModal: React.FC<propsType> = ({bools, closer}) => {
 
 
     async function createUser() {
-        //validation
-        if (!user || !userName || !fullName) {
-            return errorModal("Please complete the inputs");
-        }
-
         setLoading(true);
-
-        if (loading || userExists) {
-            //prevent multiple clicks
-            return
+    
+        if (loading) {
+            // Prevent multiple clicks
+            setLoading(false);
+            return;
         }
-
+    
         try {
             const { data: existingUser, error: selectError } = await supabase
                 .from('accounts')
                 .select('*')
                 .eq('userid', user?.uid);
-
+    
             if (selectError) {
                 console.error('Error fetching user data:', selectError);
-                setLoading(false);
                 return errorModal('Error fetching user data');
             }
+    
             if (existingUser && existingUser.length > 0) {
                 console.log('User already exists in the database.');
-                setLoading(false);
-                return errorModal('User already exists');
-            }
-            const { error: insertError } = await supabase.from('accounts').insert({
-                userid: user?.uid,
-                username: userName,
-                password: 'google.com',
-                email: user?.email,
-                fullname: fullName,
-                isPrivate: checked
-            });
-
-            if (insertError) {
-                console.error('Error inserting data:', insertError);
-                return errorModal('Error occured');
+    
+                // Check if isPrivate is null and update
+                if (existingUser[0]?.isPrivate === null) {
+                    console.log("CLICK")
+                    const { error: updateError } = await supabase
+                        .from('accounts')
+                        .update({ isPrivate: checked })
+                        .eq('userid', user?.uid); // Ensure you're updating the correct user
+    
+                    if (updateError) {
+                        console.error('Error updating isPrivate:', updateError);
+                        return errorModal('Error occurred during update');
+                    } else {
+                        console.log('User successfully updated.');
+                        notif('Account successfully updated!');
+                    }
+                } else {
+                    return errorModal('User already exists with non-null isPrivate');
+                }
             } else {
-                console.log('User successfully inserted into the database.');
-                notif('Account successfully edited!')
+                // User doesn't exist, so insert new record
+                if (!user || !userName || !fullName) {
+                    return errorModal("Please complete the inputs");
+                }
+                console.log("CLICK")
+                const { error: insertError } = await supabase.from('accounts').insert({
+                    userid: user?.uid,
+                    username: userName,
+                    password: 'google.com',
+                    email: user?.email,
+                    fullname: fullName,
+                    isPrivate: checked
+                });
+    
+                if (insertError) {
+                    console.error('Error inserting data:', insertError);
+                    return errorModal('Error occurred during insert');
+                } else {
+                    console.log('User successfully inserted into the database.');
+                    notif('Account successfully created!');
+                }
             }
-
         } catch (err) {
-            console.log('Error:', err);
-            return errorModal('Error occured, please try again later.');
+            console.error('Error:', err);
+            return errorModal('Error occurred, please try again later.');
         } finally {
             setLoading(false);
         }
@@ -223,10 +244,11 @@ const NewUserModal: React.FC<propsType> = ({bools, closer}) => {
 
     //handle different save functions
     function handleDifferentFunction() {
-        if (user && !userExists) {
+        if (fetchedData && !userExists || fetchedData && fetchedData[0]?.isPrivate === null || pfpError) {
             createUser()
         }
-        if (fetchedData && fetchedData[0]?.interests === null) {
+        if (fetchedData && fetchedData[0]?.interests === null && !pfpError && userExists &&
+            fetchedData && fetchedData[0]?.isPrivate != null) {
             sendInterests()
             console.log('clkicked')
         }
@@ -236,7 +258,7 @@ const NewUserModal: React.FC<propsType> = ({bools, closer}) => {
     const modalRef = useRef<HTMLDivElement>(null)
 
     useEffect(() => {
-        if(userExists && fetchedData && fetchedData[0]?.interests !== null) {
+        if (userExists && fetchedData && fetchedData[0]?.interests !== null) {
             gsap.to(modalRef.current, {
                 height: 'auto',
                 delay: .3,
@@ -247,14 +269,99 @@ const NewUserModal: React.FC<propsType> = ({bools, closer}) => {
         }
     }, [user, fetchedData, loading, userExists])
 
+
+    const [listenChanges, setListenChanges] = useState<boolean>(false)
+
+
+    async function handleProfileSubmit(fileEv: ChangeEvent<HTMLInputElement>) {
+        const file = fileEv?.target?.files?.[0];
+
+        if (file) {
+            const fileSizeKB = file.size / 1024; // Convert size to KB
+            const fileTypes = ['image/jpeg', 'image/png', 'image/jpg'];
+
+            // Validate file type
+            if (!fileTypes.includes(file.type)) {
+                errorModal('Please upload a valid image file (JPEG, JPG, PNG)');
+                return;
+            }
+
+            // Validate file size (limit set to 300KB)
+            if (fileSizeKB > 300) {
+                errorModal('File size exceeds 300KB. Please upload a smaller file.');
+                return;
+            }
+
+            if (user) {
+                try {
+                    console.log('Current user UID:', user?.uid);
+
+                    const storage = getStorage();
+                    const filePath = `Profiles/${user.uid}_profile_picture`; // Use user.uid in the filename
+                    const storageRef = ref(storage, filePath);
+
+                    console.log('File path:', filePath);
+
+                    const snapshot = await uploadBytes(storageRef, file);
+                    console.log('File uploaded successfully:', snapshot);
+
+                    const downloadURL = await getDownloadURL(snapshot.ref);
+                    console.log('File download URL:', downloadURL);
+
+                    notif('File uploaded successfully!');
+                    setListenChanges(prevs => !prevs)
+                } catch (uploadError) {
+                    console.error('Error during file upload:', uploadError);
+                    errorModal('There was an error uploading the file. Please try again.');
+                }
+            }
+            else {
+                errorModal('User is not logged in. Please log in to upload files.');
+            }
+        }
+    }
+    const [profilePicUrl, setProfilePicUrl] = useState<string | null>(null);
+    const [pfpError, setPfpError] = useState(false)
+    
+    useEffect(() => {
+        const fetchProfilePicture = async () => {
+            if (user) {
+                try {
+                    // Initialize Firebase Storage
+                    const storage = getStorage();
+
+                    // Define the path where you saved the image. Example: user.uid/timestamp_filename.jpg
+                    const filePath = `Profiles/${user.uid}_profile_picture`; // Use user.uid in the filename
+                    const storageRef = ref(storage, filePath);
+
+                    // Fetch the download URL
+                    const downloadURL = await getDownloadURL(storageRef);
+                    setProfilePicUrl(downloadURL); // Set the image URL in state
+                    console.log(downloadURL)
+                    setPfpError(false)
+
+                    if (!downloadURL) {
+                        errorModal('Failed to load profile picture.');
+                    }
+                } catch (error: any) {
+                    console.error('Error fetching profile picture:', error);
+                    setPfpError(true)
+                }
+            }
+        };
+
+        fetchProfilePicture();
+    }, [user, listenChanges, pfpError]);
+
+
     return (
         <div
-         className='bg-[#fff] z-50 border-[1px] border-[#b9b8b8] overflow-hidden flex flex-col text-black centerModal  rounded-xl w-full max-w-[650px] max-h-[800px]'>
+            className='bg-[#fff] z-50 border-[1px] border-[#b9b8b8] overflow-hidden flex flex-col text-black centerModal  rounded-xl w-full max-w-[650px] max-h-[800px]'>
             <ToastContainer />
 
             {/* if the user doesnt exist in the DB, in instace of google provider */}
             {
-                fetchedData && !userExists ?
+              fetchedData && fetchedData[0]?.isPrivate === null  || !userExists || pfpError ?
                     <div className='p-5'>
                         <div className='boldFontSize text-2xl text-black'>
                             WELCOME  {fetchedData && fetchedData[0]?.username} 👋
@@ -277,7 +384,8 @@ const NewUserModal: React.FC<propsType> = ({bools, closer}) => {
                             <div className='mt-3 relative px-3'>
                                 <div className='flex items-start justify-between '>
                                     <div>
-                                        <div className='absolute top-[-50px] w-[85px] h-[85px] bg-slate-500 rounded-full'>
+                                        <div className='absolute top-[-50px] w-[85px] h-[85px] bg-slate-500 rounded-full overflow-hidden'>
+                                            <img src={profilePicUrl ? profilePicUrl : userNoProfile} alt="Profile" className="w-full h-full object-cover" />
                                         </div>
                                         <div className='mt-[40px] font-bold text-lg'>
                                             {providerData === 'google.com' ? userName : fetchedData && fetchedData[0]?.username}
@@ -287,26 +395,51 @@ const NewUserModal: React.FC<propsType> = ({bools, closer}) => {
                                         </div>
                                     </div>
 
-                                    <div className='border-[1px] cursor-pointer border-[#b9b8b8] px-5 py-2 rounded-md text-black'>Set Profile</div>
+                                    <label htmlFor="profileUpload" className="border-[1px] cursor-pointer border-[#b9b8b8] px-5 py-2 rounded-md text-black">
+                                        Set Profile
+                                        <input
+                                            id="profileUpload"
+                                            type="file"
+                                            accept=".jpg,.jpeg,.png" // Restrict the file type at the input level
+                                            className="hidden"
+                                            onChange={(e) => handleProfileSubmit(e)} // Add your file handling logic here
+                                        />
+                                    </label>
+
                                 </div>
                                 <div className='flex items-center gap-3 border-y-[.5px] border-[#b9b9b9] mt-3 py-4'>
                                     <div className='w-full max-w-[50px]'>
                                         Name
                                     </div>
                                     <div className='flex justify-between items-center gap-3 w-full'>
-                                        <input
-                                            value={fullName}
-                                            onChange={(e) => { setfullName(e.target.value) }}
-                                            type="text" placeholder='Full name'
-                                            maxLength={30}
-                                            className='w-[100%] border-[1px] cursor-pointer border-[#b9b8b8] px-2 py-2 rounded-md' />
-                                        <input
-                                            value={userName}
-                                            onChange={(e) => { setUserName(e.target.value) }}
-                                            type="text"
-                                            placeholder='Username'
-                                            maxLength={30}
-                                            className='w-[100%] border-[1px] cursor-pointer border-[#b9b8b8] px-2 py-2 rounded-md' />
+                                        {
+                                            userExists ?
+                                                <div className='w-[100%] border-[1px] cursor-pointer text-[#b9b8b8] border-[#b9b8b8] px-2 py-2 rounded-md'>
+                                                    {fetchedData && fetchedData[0]?.fullname}
+                                                </div>
+                                                :
+                                                <input
+                                                    value={fullName}
+                                                    onChange={(e) => { setfullName(e.target.value) }}
+                                                    type="text" placeholder='Full name'
+                                                    maxLength={30}
+                                                    className='w-[100%] border-[1px] cursor-pointer border-[#b9b8b8] px-2 py-2 rounded-md' />
+                                        }
+                                        {
+                                            userExists ?
+                                                <div className='w-[100%] border-[1px] cursor-pointer text-[#b9b8b8] border-[#b9b8b8] px-2 py-2 rounded-md'>
+                                                    {fetchedData && fetchedData[0]?.username}
+                                                </div>
+                                                :
+                                                <input
+                                                    value={userName}
+                                                    onChange={(e) => { setUserName(e.target.value) }}
+                                                    type="text"
+                                                    placeholder='Username'
+                                                    maxLength={30}
+                                                    className='w-[100%] border-[1px] cursor-pointer border-[#b9b8b8] px-2 py-2 rounded-md' />
+                                        }
+
 
                                     </div>
                                 </div>
@@ -346,7 +479,8 @@ const NewUserModal: React.FC<propsType> = ({bools, closer}) => {
 
             {/* if the user doesnt have any interest, this will pop up */}
             {
-                fetchedData && fetchedData[0]?.interests === null &&
+                fetchedData && fetchedData[0]?.interests === null && !pfpError && userExists &&
+                fetchedData && fetchedData[0]?.isPrivate != null &&
                 <div className='px-6 overflow-auto w-full h-full'>
                     <div className='boldFontSize text-2xl text-[#4d4d4d]'>
                         PICK YOUR INTERESTS 🧐
@@ -383,7 +517,7 @@ const NewUserModal: React.FC<propsType> = ({bools, closer}) => {
                     <p className='text-[#a7a6a6]'>
                         You're ready to go. Explore a wide range of interests and pick the ones that excite you the most. Start connecting and trading skills now!
                     </p>
-                    <div         ref={modalRef} className='h-[500px]'></div>
+                    <div ref={modalRef} className='h-[500px]'></div>
                 </div>
             }
 
@@ -402,11 +536,11 @@ const NewUserModal: React.FC<propsType> = ({bools, closer}) => {
                             </div>
                         </>
                         :
-                        <div 
-                        onClick={() => {
-                            closer(true)
-                        }}
-                        className='hover:bg-[#b9b9b9]  px-5 py-1.5 border-[.5px]
+                        <div
+                            onClick={() => {
+                                closer(true)
+                            }}
+                            className='hover:bg-[#b9b9b9]  px-5 py-1.5 border-[.5px]
                   border-[#b9b9b9] rounded-lg cursor-pointer'>
                             Close
                         </div>
